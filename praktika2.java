@@ -1,8 +1,9 @@
 import java.io.*;
+import java.util.Scanner;
 
 /**
- * Клас, що містить параметри приміщення та результати обчислень.
- * Реалізує серіалізацію.
+ * Class that contains room parameters and calculation results.
+ * Implements serialization and uses transient fields.
  */
 class RoomData implements Serializable {
     private static final long serialVersionUID = 1L;
@@ -10,16 +11,20 @@ class RoomData implements Serializable {
     private int length;
     private int width;
     private int height;
-    private int perimeter;
-    private int area;
-    private int volume;
+    private transient int perimeter;
+    private transient int area;
+    private transient int volume;
     
     public RoomData(String lengthBinary, String widthBinary, String heightBinary) {
         this.length = Integer.parseInt(lengthBinary, 2);
         this.width = Integer.parseInt(widthBinary, 2);
         this.height = Integer.parseInt(heightBinary, 2);
+        compute();
     }
 
+    /**
+     * Method for calculating room parameters.
+     */
     public void compute() {
         this.perimeter = 2 * (length + width);
         this.area = length * width;
@@ -32,21 +37,33 @@ class RoomData implements Serializable {
 }
 
 /**
- * Клас для демонстрації серіалізації та десеріалізації.
+ * Class for demonstrating serialization and deserialization.
  */
 class RoomSerializer {
+    /**
+     * Method for serializing an object to a file.
+     * @param data RoomData object to serialize
+     * @param filename File name for saving
+     */
     public static void serializeData(RoomData data, String filename) {
         try (ObjectOutputStream oos = new ObjectOutputStream(new FileOutputStream(filename))) {
             oos.writeObject(data);
-            System.out.println("Дані збережені у файл " + filename);
+            System.out.println("Дані збережено у файл " + filename);
         } catch (IOException e) {
             e.printStackTrace();
         }
     }
     
+    /**
+     * Method for deserializing an object from a file.
+     * @param filename File name for reading
+     * @return Restored RoomData object
+     */
     public static RoomData deserializeData(String filename) {
         try (ObjectInputStream ois = new ObjectInputStream(new FileInputStream(filename))) {
-            return (RoomData) ois.readObject();
+            RoomData room = (RoomData) ois.readObject();
+            room.compute(); // Restore transient fields
+            return room;
         } catch (IOException | ClassNotFoundException e) {
             e.printStackTrace();
             return null;
@@ -55,21 +72,31 @@ class RoomSerializer {
 }
 
 /**
- * Клас для тестування обчислень та серіалізації.
+ * Class for testing calculations and serialization.
  */
 class RoomComputationTest {
     public static void main(String[] args) {
-        // Бінарні значення довжини, ширини та висоти
-        String lengthBinary = "101";  // 5
-        String widthBinary = "100";   // 4
-        String heightBinary = "11";   // 3
+        Scanner scanner = new Scanner(System.in);
+        
+        System.out.print("Введіть довжину у двійковому форматі: ");
+        String lengthBinary = scanner.nextLine();
+        
+        System.out.print("Введіть ширину у двійковому форматі: ");
+        String widthBinary = scanner.nextLine();
+        
+        System.out.print("Введіть висоту у двійковому форматі: ");
+        String heightBinary = scanner.nextLine();
+        
+        scanner.close();
         
         RoomData room = new RoomData(lengthBinary, widthBinary, heightBinary);
-        room.compute();
         
-        System.out.println("Периметр: " + room.getPerimeter());
-        System.out.println("Площа: " + room.getArea());
-        System.out.println("Об'єм: " + room.getVolume());
+        System.out.println("==============================");
+        System.out.println("Результати обчислень:");
+        System.out.println(String.format("%-15s: %d", "Периметр", room.getPerimeter()));
+        System.out.println(String.format("%-15s: %d", "Площа", room.getArea()));
+        System.out.println(String.format("%-15s: %d", "Об'єм", room.getVolume()));
+        System.out.println("==============================");
 
         String filename = "roomData.ser";
         RoomSerializer.serializeData(room, filename);
@@ -77,9 +104,11 @@ class RoomComputationTest {
         RoomData restoredRoom = RoomSerializer.deserializeData(filename);
         if (restoredRoom != null) {
             System.out.println("Відновлені дані:");
-            System.out.println("Периметр: " + restoredRoom.getPerimeter());
-            System.out.println("Площа: " + restoredRoom.getArea());
-            System.out.println("Об'єм: " + restoredRoom.getVolume());
+            System.out.println("==============================");
+            System.out.println(String.format("%-15s: %d", "Периметр", restoredRoom.getPerimeter()));
+            System.out.println(String.format("%-15s: %d", "Площа", restoredRoom.getArea()));
+            System.out.println(String.format("%-15s: %d", "Об'єм", restoredRoom.getVolume()));
+            System.out.println("==============================");
         }
     }
 }
