@@ -1,210 +1,154 @@
-import java.io.*;
 import java.util.*;
 import java.util.concurrent.*;
-import java.util.stream.*;
+import java.util.stream.Collectors;
 
 /**
- * Інтерфейс для об'єктів, які можуть бути відображені.
+ * Основний клас для керування обчисленнями
  */
-interface Displayable {
-    void display();
+class ComputationManager {
+    private List<Double> data = Collections.synchronizedList(new ArrayList<>());
+
+    public void addData(double value) {
+        data.add(value);
+    }
+
+    public List<Double> getData() {
+        return data;
+    }
+
+    /**
+     * Паралельний пошук мінімального значення
+     */
+    public double findMin() {
+        return data.parallelStream().min(Double::compareTo).orElse(Double.NaN);
+    }
+
+    /**
+     * Паралельний пошук максимального значення
+     */
+    public double findMax() {
+        return data.parallelStream().max(Double::compareTo).orElse(Double.NaN);
+    }
+
+    /**
+     * Паралельне обчислення середнього значення
+     */
+    public double computeAverage() {
+        return data.parallelStream().mapToDouble(Double::doubleValue).average().orElse(Double.NaN);
+    }
+
+    /**
+     * Паралельний відбір значень за критерієм (наприклад, більше 10)
+     */
+    public List<Double> filterByCriterion(double threshold) {
+        return data.parallelStream().filter(value -> value > threshold).collect(Collectors.toList());
+    }
 }
 
 /**
- * Інтерфейс для об'єктів, які можуть виконувати команди.
+ * Інтерфейс команди
  */
-interface Command {
+interface Task {
     void execute();
-    void undo();
 }
 
 /**
- * Клас для збереження історії команд.
+ * Клас, що реалізує завдання обчислення статистики
  */
-class CommandManager {
-    private static final CommandManager instance = new CommandManager();
-    private final Deque<Command> commandHistory = new ArrayDeque<>();
+class StatsTask implements Task {
+    private ComputationManager manager;
 
-    private CommandManager() {}
-
-    public static CommandManager getInstance() {
-        return instance;
-    }
-
-    public void executeCommand(Command command) {
-        command.execute();
-        commandHistory.push(command);
-    }
-
-    public void undoLastCommand() {
-        if (!commandHistory.isEmpty()) {
-            commandHistory.pop().undo();
-        } else {
-            System.out.println("Немає команд для скасування.");
-        }
-    }
-}
-
-/**
- * Команда для додавання кімнати.
- */
-class AddRoomCommand implements Command {
-    private final RoomData room;
-    private final List<RoomData> roomList;
-
-    public AddRoomCommand(RoomData room, List<RoomData> roomList) {
-        this.room = room;
-        this.roomList = roomList;
+    public StatsTask(ComputationManager manager) {
+        this.manager = manager;
     }
 
     @Override
     public void execute() {
-        room.compute();
-        synchronized (roomList) {
-            roomList.add(room);
-        }
-    }
-
-    @Override
-    public void undo() {
-        synchronized (roomList) {
-            roomList.remove(room);
-        }
+        System.out.println("Статистична обробка даних...");
+        System.out.println("Мінімум: " + manager.findMin());
+        System.out.println("Максимум: " + manager.findMax());
+        System.out.println("Середнє значення: " + manager.computeAverage());
     }
 }
 
 /**
- * Абстрактний клас для представлення приміщення.
+ * Клас управління чергою завдань (Worker Thread)
  */
-abstract class RoomData implements Serializable, Displayable {
-    protected int length;
-    protected int width;
-    protected int height;
-    protected int perimeter;
-    protected int area;
-    protected int volume;
+class TaskQueue {
+    private final BlockingQueue<Task> taskQueue = new LinkedBlockingQueue<>();
+    private final ExecutorService workerPool = Executors.newFixedThreadPool(2); // Два робочих потоки
 
-    public RoomData(String lengthBinary, String widthBinary, String heightBinary) {
+    public TaskQueue() {
+        for (int i = 0; i < 2; i++) {
+            workerPool.execute(this::processTasks);
+        }
+    }
+
+    public void addTask(Task task) {
         try {
-            this.length = Integer.parseInt(lengthBinary, 2);
-            this.width = Integer.parseInt(widthBinary, 2);
-            this.height = Integer.parseInt(heightBinary, 2);
-        } catch (NumberFormatException e) {
-            throw new IllegalArgumentException("Неправильний формат двійкових чисел.", e);
-        }
-    }
-
-    public void compute() {
-        this.perimeter = 2 * (length + width);
-        this.area = length * width;
-        this.volume = length * width * height;
-    }
-
-    public int getPerimeter() { return perimeter; }
-    public int getArea() { return area; }
-    public int getVolume() { return volume; }
-}
-
-/**
- * Клас для текстового відображення кімнати.
- */
-class TableRoomData extends RoomData {
-    public TableRoomData(String lengthBinary, String widthBinary, String heightBinary) {
-        super(lengthBinary, widthBinary, heightBinary);
-    }
-
-    @Override
-    public void display() {
-        System.out.printf("%-10s %-10s %-10s %-10s %-10s %-10s%n", "Довжина", "Ширина", "Висота", "Периметр", "Площа", "Об'єм");
-        System.out.printf("%-10d %-10d %-10d %-10d %-10d %-10d%n", length, width, height, perimeter, area, volume);
-    }
-}
-
-/**
- * Фабричний інтерфейс.
- */
-interface RoomFactory {
-    RoomData createRoom(String lengthBinary, String widthBinary, String heightBinary);
-}
-
-/**
- * Конкретна фабрика для створення об'єктів TableRoomData.
- */
-class TableRoomFactory implements RoomFactory {
-    @Override
-    public RoomData createRoom(String lengthBinary, String widthBinary, String heightBinary) {
-        return new TableRoomData(lengthBinary, widthBinary, heightBinary);
-    }
-}
-
-/**
- * Клас Worker Thread для обробки задач.
- */
-class TaskWorker {
-    private final ExecutorService executor = Executors.newFixedThreadPool(4);
-
-    public void submitTask(Runnable task) {
-        executor.submit(task);
-    }
-
-    public void shutdown() {
-        executor.shutdown();
-        try {
-            if (!executor.awaitTermination(5, TimeUnit.SECONDS)) {
-                executor.shutdownNow();
-            }
+            taskQueue.put(task);
         } catch (InterruptedException e) {
-            executor.shutdownNow();
             Thread.currentThread().interrupt();
         }
     }
+
+    private void processTasks() {
+        while (true) {
+            try {
+                Task task = taskQueue.take();
+                task.execute();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                break;
+            }
+        }
+    }
+
+    public void shutdown() {
+        workerPool.shutdown();
+    }
 }
 
 /**
- * Головний клас для тестування програми з діалоговим інтерфейсом.
+ * Основний клас для тестування
  */
-class RoomComputationTest {
+public class praktika6 {
     public static void main(String[] args) {
-        try (Scanner scanner = new Scanner(System.in)) {
-            RoomFactory factory = new TableRoomFactory();
-            List<RoomData> roomList = Collections.synchronizedList(new ArrayList<>());
-            CommandManager commandManager = CommandManager.getInstance();
-            TaskWorker worker = new TaskWorker();
+        Scanner scanner = new Scanner(System.in);
+        ComputationManager manager = new ComputationManager();
+        TaskQueue taskQueue = new TaskQueue();
 
-            while (true) {
-                System.out.println("Оберіть опцію: \n1 - Додати кімнату \n2 - Скасувати останню дію \n3 - Відобразити кімнати \n4 - Паралельна обробка \n5 - Вийти");
-                int choice = scanner.nextInt();
-                scanner.nextLine();
+        while (true) {
+            System.out.println("\nМеню:");
+            System.out.println("1 - Додати число");
+            System.out.println("2 - Запустити статистичну обробку");
+            System.out.println("3 - Відфільтрувати за критерієм (>10)");
+            System.out.println("4 - Вийти");
 
-                if (choice == 1) {
-                    System.out.println("Введіть параметри кімнати у двійковій системі (довжина ширина висота через пробіл):");
-                    String[] input = scanner.nextLine().split(" ");
-                    RoomData room = factory.createRoom(input[0], input[1], input[2]);
-                    commandManager.executeCommand(new AddRoomCommand(room, roomList));
-                } else if (choice == 2) {
-                    commandManager.undoLastCommand();
-                } else if (choice == 3) {
-                    synchronized (roomList) {
-                        System.out.println("Результати обчислень:");
-                        roomList.forEach(RoomData::display);
-                    }
-                } else if (choice == 4) {
-                    worker.submitTask(() -> {
-                        synchronized (roomList) {
-                            int min = roomList.stream().mapToInt(RoomData::getArea).min().orElse(0);
-                            int max = roomList.stream().mapToInt(RoomData::getArea).max().orElse(0);
-                            double avg = roomList.stream().mapToInt(RoomData::getArea).average().orElse(0);
-                            System.out.println("Мінімальна площа: " + min);
-                            System.out.println("Максимальна площа: " + max);
-                            System.out.println("Середня площа: " + avg);
-                        }
-                    });
-                } else if (choice == 5) {
-                    worker.shutdown();
+            int choice = scanner.nextInt();
+
+            switch (choice) {
+                case 1:
+                    System.out.println("Введіть число:");
+                    double value = scanner.nextDouble();
+                    manager.addData(value);
                     break;
-                } else {
+
+                case 2:
+                    taskQueue.addTask(new StatsTask(manager));
+                    break;
+
+                case 3:
+                    System.out.println("Результати фільтрації (>10): " + manager.filterByCriterion(10));
+                    break;
+
+                case 4:
+                    taskQueue.shutdown();
+                    System.out.println("Програма завершена.");
+                    return;
+
+                default:
                     System.out.println("Невірний вибір.");
-                }
             }
         }
     }
