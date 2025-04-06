@@ -147,7 +147,7 @@ class TextDisplayFactory extends DisplayFactory {
 /**
  * Клас тестування
  */
-public class CompilatonTest {
+public class praktika5 {
     public static void main(String[] args) {
         Scanner scanner = new Scanner(System.in);
         SolverSingleton solver = SolverSingleton.getInstance();
